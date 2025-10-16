@@ -15,22 +15,24 @@ class NQueen:
 
     def forward_checking(self, q):
         """Performs forward checking."""
-
+        # store a mask of size n to only store n bits for the diagonal bitwise shift operations
+        n_mask = (1 << self.n) - 1
         # get current queens assignment
-        q_mask = self.queens[q]
+        q_mask = self.queens[q] & n_mask
 
         # update domains of all future queens
         for j in range(q+1, self.n):
             # calculate all rows and diagonals affected by the current queens row
             # current row must be removed from future queens domains
-            attack_rows = q_mask
+            attack_rows = q_mask & n_mask
             # standardize diagonals with respect to current queen and jth queen
-            attack_main_diag = q_mask >> (j - q)
-            attack_anti_diag = q_mask << (j - q)
+            shift = j - q
+            attack_main_diag = (q_mask >> shift) & n_mask
+            attack_anti_diag = (q_mask << shift) & n_mask
             # calculate mask of all rows that are unavailable
-            attack_mask = attack_rows | attack_main_diag | attack_anti_diag
+            attack_mask = (attack_rows | attack_main_diag | attack_anti_diag) & n_mask
             # update jth queen's domain by masking out the rows that are unavailable
-            self.domains[j] &= ~attack_mask
+            self.domains[j] &= (~attack_mask) & n_mask
 
             # if new domain is empty, we can backtrack early
             if self.domains[j] == 0:
@@ -66,7 +68,7 @@ class NQueen:
             main_diag_mask |= standard_main
 
             # check anti diagonals for confilcts
-            standard_anti = q_mask << self.n - 1 - q 
+            standard_anti = q_mask << (self.n - 1 - q) 
             if anti_diag_mask & standard_anti:
                 # diagonal has multiple queens
                 return False
@@ -107,30 +109,32 @@ class NQueen:
         if q == self.n:
             return self.queens
         
-        # instantiate a copy of the current domains if forward checking finds failure
-        copy_domains = self.domains.copy()
-
         # iterate over the rows
         for row in range(self.n):
             # assign queen to current row
             q_mask = 1 << (self.n - 1 - row)
             # check if current assignment is in the queen's domain
-            if q_mask & self.domains[q]:
-                self.queens[q] = q_mask
+            if not (q_mask & self.domains[q]):
+                continue
 
-                # perform forward checking given the assignment
-                if self.forward_checking(q):
-                    result = self.forward_backtrack(q+1)
-                    if result: 
-                        return result
-                # forward check failed, restore original domains
-                self.domains = copy_domains
+            # instantiate a copy of the current domains if forward checking finds failure
+            copy_domains = self.domains.copy()
+
+            self.queens[q] = q_mask
+
+            # perform forward checking given the assignment, and check if its correct
+            if self.check_constraints(set(range(q+1))) and self.forward_checking(q):
+                result = self.forward_backtrack(q+1)
+                if result: 
+                    return result
+
+            # forward check failed, restore original domains
+            self.domains = copy_domains
+            self.queens[q] = 0
 
         # no assignments work, backtrack
-        self.queens[q] = 0
         self.backtracks += 1
         return None
-
 
     def solve(self, basic):
         """Solve N Queens with the given bracktracking strategy."""
